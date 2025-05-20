@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import nltk
 import re
 
 # Download NLTK resources
@@ -16,64 +16,58 @@ nltk.download('punkt')
 def preprocess_text(text):
     stop_words = set(stopwords.words('english'))
     text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
+    text = re.sub(r'\W', ' ', text)  # Remove non-word characters
     tokens = word_tokenize(text)
     tokens = [word for word in tokens if word not in stop_words]
     return ' '.join(tokens)
 
-# Simulated pre-trained model (replace with actual training in production)
-@st.cache_resource
-def load_model():
-    # For demo, we'll create a simple TF-IDF vectorizer and Logistic Regression model
-    vectorizer = TfidfVectorizer(max_features=5000)
-    model = LogisticRegression()
-    
-    # Simulated training data (replace with real dataset)
-    sample_data = [
-        ("This news is completely fabricated and false", 0),  # Fake
-        ("Breaking news: Major event confirmed by officials", 1),  # Real
-        ("Aliens landed in New York, says anonymous source", 0),  # Fake
-        ("Government releases official statement on policy", 1)  # Real
-    ]
-    texts, labels = zip(*sample_data)
-    X = vectorizer.fit_transform([preprocess_text(text) for text in texts])
-    model.fit(X, labels)
-    return vectorizer, model
+# Sample training data (replace with a larger dataset for better accuracy)
+data = {
+    'text': [
+        'The government is hiding alien evidence',  # Fake
+        'New study confirms climate change impact',  # Real
+        'Celebrity caught in scandal with no proof',  # Fake
+        'Local hospital opens new wing for patients',  # Real
+        'Secret society controls global economy',  # Fake
+        'Economy grows by 2% in Q3',  # Real
+    ],
+    'label': [0, 1, 0, 1, 0, 1]  # 0 = Fake, 1 = Real
+}
+df = pd.DataFrame(data)
 
-# Load model and vectorizer
-vectorizer, model = load_model()
+# Preprocess the training data
+df['text'] = df['text'].apply(preprocess_text)
+
+# Train a simple model
+vectorizer = TfidfVectorizer(max_features=500)
+X = vectorizer.fit_transform(df['text']).toarray()
+y = df['label']
+model = LogisticRegression()
+model.fit(X, y)
 
 # Streamlit app
-st.title("📰 Fake News Detector")
-st.write("Enter a news headline or text to check if it's fake or real.")
+st.title("Fake News Detector")
+st.write("Enter a news headline or article snippet to check if it's real or fake.")
 
 # User input
 user_input = st.text_area("Enter news text:", height=150)
 
 if st.button("Check News"):
-    if user_input.strip() == "":
-        st.warning("Please enter some text to analyze.")
-    else:
-        # Preprocess and predict
-        processed_text = preprocess_text(user_input)
-        X = vectorizer.transform([processed_text])
-        prediction = model.predict(X)[0]
-        probability = model.predict_proba(X)[0][1]  # Probability of being Real
+    if user_input:
+        # Preprocess user input
+        processed_input = preprocess_text(user_input)
+        input_vector = vectorizer.transform([processed_input]).toarray()
+        
+        # Predict
+        prediction = model.predict(input_vector)[0]
+        probability = model.predict_proba(input_vector)[0][prediction] * 100
 
         # Display result
         if prediction == 1:
-            st.success(f"✅ This news is likely **Real** (Confidence: {probability:.2%})")
+            st.success(f"This news is likely **Real** (Confidence: {probability:.2f}%)")
         else:
-            st.error(f"❌ This news is likely **Fake** (Confidence: {1 - probability:.2%})")
+            st.error(f"This news is likely **Fake** (Confidence: {probability:.2f}%)")
+    else:
+        st.warning("Please enter some text to analyze.")
 
-# Instructions for users
-st.markdown("""
-### How it works:
-1. Enter a news headline or short article text.
-2. The model processes the text using NLP techniques (TF-IDF and Logistic Regression).
-3. It predicts whether the news is likely **Fake** or **Real** with a confidence score.
-
-*Note*: This is a simplified demo. For better accuracy, use a large, labeled dataset to train the model.
-""")
-
-# Run the app with: streamlit run app.py
+st.write("Note: This is a basic model trained on a small dataset. For better accuracy, use a larger dataset and advanced models.")
