@@ -1,6 +1,12 @@
+keras
+tensorflow
 streamlit
+nltk
+pickle
+re
+string
 pandas
-scikit-learn
+numpy
 seaborn
 matplotlib
-pip install -r requirements.txt
+plotly
