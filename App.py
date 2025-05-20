@@ -1,44 +1,67 @@
+import streamlit as st
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-import seaborn as sns
-import matplotlib.pyplot as plt
+import re
 
-# Load the dataset
-df = pd.read_csv('cleaned_fakenews.csv')
+# Function to clean text
+def clean_text(text):
+    text = text.lower()  # Convert to lowercase
+    text = re.sub(r'\W', ' ', text)  # Remove special characters
+    text = re.sub(r'\s+', ' ', text)  # Remove extra spaces
+    return text.strip()
 
-# Basic EDA
-print("Dataset Shape:", df.shape)
-print("Missing values:\n", df.isnull().sum())
-print("Class distribution:\n", df['label'].value_counts())
+# Streamlit app
+st.title("📰 Fake News Detection")
+st.write("Enter a news headline or article text to check if it's fake or real.")
 
-# Text preprocessing (if necessary, can add stemming/lemmatization here)
-X = df['text']
-y = df['label']  # assuming 'label' is 0 for fake, 1 for real or vice versa
+# Sample dataset (for demonstration; in practice, use a larger dataset)
+data = {
+    'text': [
+        "Scientists confirm moon is made of cheese",
+        "New study reveals benefits of regular exercise",
+        "Aliens invade New York, officials say",
+        "Government passes new healthcare reform bill",
+        "Elvis Presley found alive in Texas",
+        "Local team wins national championship"
+    ],
+    'label': [0, 1, 0, 1, 0, 1]  # 0 = Fake, 1 = Real
+}
+df = pd.DataFrame(data)
 
-# Split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Clean the text data
+df['text'] = df['text'].apply(clean_text)
 
-# TF-IDF Vectorization
-vectorizer = TfidfVectorizer(stop_words='english', max_df=0.7)
-X_train_tfidf = vectorizer.fit_transform(X_train)
-X_test_tfidf = vectorizer.transform(X_test)
+# Vectorize text using TF-IDF
+vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
+X = vectorizer.fit_transform(df['text'])
+y = df['label']
 
-# Logistic Regression model
+# Train a simple logistic regression model
 model = LogisticRegression()
-model.fit(X_train_tfidf, y_train)
-y_pred = model.predict(X_test_tfidf)
+model.fit(X, y)
 
-# Evaluation
-print("Accuracy Score:", accuracy_score(y_test, y_pred))
-print("\nClassification Report:\n", classification_report(y_test, y_pred))
+# User input
+user_input = st.text_area("Enter news headline or article text:", height=150)
 
-# Confusion matrix
-cm = confusion_matrix(y_test, y_pred)
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Fake', 'Real'], yticklabels=['Fake', 'Real'])
-plt.xlabel('Predicted')
-plt.ylabel('Actual')
-plt.title('Confusion Matrix')
-plt.show()
+if st.button("Check News"):
+    if user_input:
+        # Clean and vectorize user input
+        cleaned_input = clean_text(user_input)
+        input_vector = vectorizer.transform([cleaned_input])
+        
+        # Predict
+        prediction = model.predict(input_vector)[0]
+        probability = model.predict_proba(input_vector)[0][prediction] * 100
+        
+        # Display result
+        if prediction == 1:
+            st.success(f"This news is likely **Real** ({probability:.2f}% confidence).")
+        else:
+            st.error(f"This news is likely **Fake** ({probability:.2f}% confidence).")
+    else:
+        st.warning("Please enter some text to analyze.")
+
+# Footer
+st.markdown("---")
+st.write("Note: This is a simple demo using a small dataset. For better accuracy, use a larger, well-curated dataset and advanced NLP models.")
