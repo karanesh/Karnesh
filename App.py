@@ -1,116 +1,92 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-import re
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+import seaborn as sns
+import matplotlib.pyplot as plt
+import io
 
-# Dynamically download NLTK resources
-try:
-    nltk.data.find('corpora/stopwords')
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('stopwords', quiet=True)
-    nltk.download('punkt', quiet=True)
+# Set page configuration
+st.set_page_config(page_title="Fake News Classifier", layout="wide")
 
-# Function to preprocess text
-def preprocess_text(text):
-    stop_words = set(stopwords.words('english'))
-    text = text.lower()
-    text = re.sub(r'\W', ' ', text)  # Remove non-word characters
-    tokens = word_tokenize(text)
-    tokens = [word for word in tokens if word not in stop_words]
-    return ' '.join(tokens)
+# Title and description
+st.title("Fake News Classifier")
+st.write("This app analyzes a news dataset and trains a logistic regression model to classify news as Fake or Real.")
 
-# Sample training data (expanded for better training)
-data = {
-    'text': [
-        'Aliens discovered on Mars, says anonymous source',  # Fake
-        'New vaccine reduces flu cases by 40%, study shows',  # Real
-        'Secret society controls global elections',  # Fake
-        'Economic growth reported at 2.5% in Q4',  # Real
-        'Celebrity fakes death to avoid taxes',  # Fake
-        'Climate change linked to rising sea levels',  # Real
-        'Moon landing was staged in Hollywood studio',  # Fake
-        'New hospital wing opens to serve community',  # Real
-        'Government hides UFO sightings from public',  # Fake
-        'Scientists discover new species in Pacific Ocean'  # Real
-    ],
-    'label': [0, 1, 0, 1, 0, 1, 0, 1, 0, 1]  # 0 = Fake, 1 = Real
-}
-df = pd.DataFrame(data)
+# File uploader for CSV
+uploaded_file = st.file_uploader("Upload your CSV file (must contain 'text' and 'label' columns)", type=["csv"])
 
-# Preprocess the training data
-df['text'] = df['text'].apply(preprocess_text)
-
-# Train the model
-try:
-    vectorizer = TfidfVectorizer(max_features=500)
-    X = vectorizer.fit_transform(df['text']).toarray()
-    y = df['label']
-    model = LogisticRegression()
-    model.fit(X, y)
-except Exception as e:
-    st.error(f"Error training model: {e}")
-    st.stop()
-
-# Streamlit app
-st.title("Fake News Detector")
-st.write("Enter a news headline or article snippet to check if it's real or fake.")
-
-# User input
-user_input = st.text_area("Enter news text:", height=150)
-
-if st.button("Check News"):
-    if user_input:
-        # Preprocess user input
-        processed_input = preprocess_text(user_input)
-        input_vector = vectorizer.transform([processed_input]).toarray()
+if uploaded_file is not None:
+    try:
+        # Read the uploaded CSV file
+        df = pd.read_csv(uploaded_file)
         
-        # Predict
-        try:
-            prediction = model.predict(input_vector)[0]
-            probabilities = model.predict_proba(input_vector)[0]
-            prob_fake = probabilities[0] * 100
-            prob_real = probabilities[1] * 100
+        # Basic EDA
+        st.subheader("Exploratory Data Analysis")
+        st.write("Dataset Shape:", df.shape)
+        st.write("Missing Values:")
+        st.write(df.isnull().sum())
+        st.write("Class Distribution:")
+        st.write(df['label'].value_counts())
 
-            # Display result
-            if prediction == 1:
-                st.success(f"This news is likely **Real** (Confidence: {prob_real:.2f}%)")
+        # Check for required columns
+        if 'text' not in df.columns or 'label' not in df.columns:
+            st.error("Error: Dataset must contain 'text' and 'label' columns.")
+        else:
+            # Ensure 'text' column is string type and handle missing values
+            df['text'] = df['text'].astype(str).fillna('')
+            df['label'] = df['label'].fillna(-1)  # Placeholder for invalid labels
+            if not df['label'].isin([0, 1]).all():
+                st.error("Error: 'label' column must contain only 0 or 1 values.")
             else:
-                st.error(f"This news is likely **Fake** (Confidence: {prob_fake:.2f}%)")
+                # Text preprocessing and model training
+                X = df['text']
+                y = df['label']  # Assuming 'label' is 0 for fake, 1 for real or vice versa
 
-            # Display confidence chart
-            st.write("Prediction Confidence")
-            chart_data = {
-                "type": "bar",
-                "data": {
-                    "labels": ["Fakeល Fake", "Real"],
-                    "datasets": [{
-                        "label": "Confidence (%)",
-                        "data": [prob_fake, prob_real],
-                        "backgroundColor": ["#FF6B6B", "#4CAF50"],
-                        "borderColor": ["#FF4C4C", "#388E3C"],
-                        "borderWidth": 1
-                    }]
-                },
-                "options": {
-                    "scales": {
-                        "y": {
-                            "beginAtZero": True,
-                            "max": 100
-                        }
-                    }
-                }
-            }
-            st.write("```chartjs\n" + str(chart_data) + "\n```")
-        except Exception as e:
-            st.error(f"Error processing input: {e}")
-    else:
-        st.warning("Please enter some text to analyze.")
+                # Split data
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-st.write("Note: This is a basic model trained on a small dataset. For better accuracy, use a larger dataset and advanced models.")
-    
+                # TF-IDF Vectorization
+                vectorizer = TfidfVectorizer(stop_words='english', max_df=0.7)
+                X_train_tfidf = vectorizer.fit_transform(X_train)
+                X_test_tfidf = vectorizer.transform(X_test)
+
+                # Logistic Regression model
+                model = LogisticRegression()
+                model.fit(X_train_tfidf, y_train)
+                y_pred = model.predict(X_test_tfidf)
+
+                # Evaluation
+                st.subheader("Model Evaluation")
+                st.write("Accuracy Score:", accuracy_score(y_test, y_pred))
+                st.write("Classification Report:")
+                st.text(classification_report(y_test, y_pred))
+
+                # Confusion Matrix
+                st.subheader("Confusion Matrix")
+                cm = confusion_matrix(y_test, y_pred)
+                fig, ax = plt.subplots()
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Fake', 'Real'], yticklabels=['Fake', 'Real'], ax=ax)
+                ax.set_xlabel('Predicted')
+                ax.set_ylabel('Actual')
+                ax.set_title('Confusion Matrix')
+                st.pyplot(fig)
+
+                # Optional: Predict on user input
+                st.subheader("Try It Yourself")
+                user_input = st.text_area("Enter a news article text to classify:", height=200)
+                if st.button("Classify"):
+                    if user_input:
+                        # Transform user input
+                        user_tfidf = vectorizer.transform([user_input])
+                        prediction = model.predict(user_tfidf)[0]
+                        label = 'Real' if prediction == 1 else 'Fake'
+                        st.write(f"Prediction: *{label}*")
+                    else:
+                        st.warning("Please enter some text to classify.")
+    except Exception as e:
+        st.error(f"An error occurred while processing the file: {str(e)}")
+else:
+    st.info("Please upload a CSV file to proceed.")
