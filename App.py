@@ -1,100 +1,60 @@
-# Module 1: Import necessary packages
 import streamlit as st
-import numpy as np
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.svm import LinearSVC
-from sklearn.naive_bayes import MultinomialNB
-import warnings
-import streamlit_lottie
-warnings.filterwarnings("ignore")
+import matplotlib.pyplot as plt
+import spacy
+from spacy.lang.el.stop_words import STOP_WORDS
+from wordcloud import WordCloud
+from utils import get_page_text
 
-# Module 2: Load the dataset
-@st.cache
-def load_data():
-    data = pd.read_csv("fake_or_real_news.csv")
-    data['fake'] = data['label'].apply(lambda x: 0 if x == 'REAL' else 1)
-    return data
+st.set_page_config(page_title = "Greek Fake News Detector")
 
-# Module 3: Select Vectorizer and Classifier
-def select_model():
-    vectorizer_type = st.sidebar.selectbox("Select Vectorizer", ["TF-IDF", "Bag of Words"])
-    classifier_type = st.sidebar.selectbox("Select Classifier", ["Linear SVM", "Naive Bayes"])
-    
-    vectorizer = None
-    if vectorizer_type == "TF-IDF":
-        vectorizer = TfidfVectorizer(stop_words='english', max_df=0.7)
-    elif vectorizer_type == "Bag of Words":
-        vectorizer = CountVectorizer(stop_words='english', max_df=0.7)
-    
-    classifier = None
-    if classifier_type == "Linear SVM":
-        classifier = LinearSVC()
-    elif classifier_type == "Naive Bayes":
-        classifier = MultinomialNB()
-    
-    return vectorizer, classifier
+@st.cache(allow_output_mutation=True)
+def get_nlp_model(path):   
+    return spacy.load(path)
 
-# Module 4: Train the model
-@st.cache
-def train_model(data, vectorizer, classifier):
-    x_vectorized = vectorizer.fit_transform(data['text'])
-    clf = classifier.fit(x_vectorized, data['fake'])
-    return clf
+def generate_output(text):
+     cats = nlp(text).cats
+     if cats['FAKE'] > cats['REAL']:
+         st.markdown("<h1><span style='color:red'>This is a fake news article!</span></h1>",
+                     unsafe_allow_html=True)
+     else:
+         st.markdown("<h1><span style='color:green'>This is a real news article!</span></h1>",
+                     unsafe_allow_html=True)
+             
+     q_text = '> '.join(text.splitlines(True))   
+     q_text = '> ' + q_text
+     st.markdown(q_text)
 
-# Module 5: Streamlit app
-def main():
-    # Set page configuration
-    page_icon = ":metro:"  # emojis: https://www.webfx.com/tools/emoji-cheat-sheet/
-    layout = "wide"
-    page_title = "Fake News Detection"
-    st.set_page_config(page_title=page_title, page_icon=page_icon, layout=layout)
-    
-    # Streamlit app
-    st.title(page_title + " " + page_icon)
-    st.lottie("https://lottie.host/bd0c4818-c5a6-4e42-b407-746bc448c2c7/ipVUdgFncO.json", width=200, height=200)
+     wc = WordCloud(width = 1000, height = 600,
+                    random_state = 1, background_color = 'white',
+                    stopwords = STOP_WORDS).generate(text) 
+     
+     fig, ax = plt.subplots()
+     ax.imshow(wc)
+     ax.axis('off')
+     st.pyplot(fig)
+     print(cats)
 
-    # --- HIDE STREAMLIT STYLE ---
-    hide_st_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    </style>
-    """
-    st.markdown(hide_st_style, unsafe_allow_html=True)
+nlp = get_nlp_model('model')
 
-    # Load data
-    data = load_data()
-    
-    # Select vectorizer and classifier
-    vectorizer, classifier = select_model()
-    
-    # Text input for user to input news article
-    user_input = st.text_area("Enter your news article here:")
-    
-    # When user submits the input
-    if st.button("Check"):
-        # Train the model
-        clf = train_model(data, vectorizer, classifier)
-        
-        # Vectorize the user input
-        input_vectorized = vectorizer.transform([user_input])
-        
-        # Predict the label of the input
-        prediction = clf.predict(input_vectorized)
-        
-        # Convert prediction to integer for interpretation
-        result = int(prediction[0])
-        
-        # Display the result
-        if result == 1:
-            st.error("This news article is likely fake!")
-        else:
-            st.success("This news article seems to be real.")
+desc = "This web app detects fake news written in the Greek language.\
+        You can either enter the URL of a news article, or paste the text directly (works better).\
+        This app was developed with the Streamlit and spacy Python libraries.\
+        The Github repository of the app is available [here](https://github.com/derevirn/gfn-detector).\
+        Feel free to contact me on [LinkedIn](https://www.linkedin.com/in/giannis-tolios-0020b067/)\
+        or via [e-mail](mailto:derevirn@gmail.com)."
 
-# Run the Streamlit app
-if _name_ == "_main_":
-    main()
-st.markdown("*Created with enthusiasm by SuperSam*")
-##run with command streamlit run main.py --client.showErrorDetails=false to remove cache error message on streamlit interface
+st.title("Greek Fake News Detector")
+st.markdown(desc)
+st.subheader("Enter the URL address/text of a news article written in Greek")
+select_input = st.radio("Select Input:", ["URL", "Text"])
+
+if select_input == "URL":
+    url = st.text_input("URL")   
+    if st.button("Run"):
+        text = get_page_text(url)
+        generate_output(text)  
+
+else:
+    text = st.text_area("Text", height=300)
+    if st.button("Run"):
+        generate_output(text) 
